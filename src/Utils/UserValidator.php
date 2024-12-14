@@ -2,11 +2,11 @@
 
 namespace App\Utils;
 
-use App\Database\UserEntity;
+use App\Database\User;
 
 class UserValidator
 {
-    public static function isValidEmail(string $email): bool
+    public static function isEmailValid(string $email): bool
     {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $_SESSION["error_email"] = "Please provide a valid email address.";
@@ -15,14 +15,20 @@ class UserValidator
         return true;
     }
 
-    public static function isValidLength(string $password): bool
+    public static function isPasswordLengthValid(string $password): bool
     {
-        return InputValidator::isLengthWithInLimit($password, "password", Constants::PASSWORD_ALLOWED_MIN_CHARS, Constants::PASSWORD_ALLOWED_MAX_CHARS);
+        return FormInputValidator::validateLength(
+            $password,
+            "password",
+            AppConstants::PASSWORD_MIN_LENGTH,
+            AppConstants::PASSWORD_MAX_LENGTH
+        );
     }
 
-    public static function isValidCredentials(string $email, string $password): bool
+    public static function areCredentialsValid(string $email, string $password): bool
     {
-        if ((!$user = UserEntity::getUserByEmail($email)) || !password_verify($password, $user["pass"])) {
+        $user = User::fetchUserByEmail($email);
+        if (!$user || !password_verify($password, $user["password"])) {
             $_SESSION["error_credentials"] = "Invalid email or password.";
             return false;
         }

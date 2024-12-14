@@ -2,39 +2,49 @@
 
 namespace App\Utils;
 
-use App\Database\CategoryEntity;
-use App\Database\PostEntity;
+use App\Database\Category;
+use App\Database\Post;
 
 class PostValidator
 {
-    public static function isPublishedPost(string $statusPost): bool
+    public static function isPostPublished(string $postStatus): bool
     {
-        return StatusPost::Published->toString() === $statusPost;
+        return PostStatus::Published->getStatusLabel() === $postStatus;
     }
 
-    public static function isValidTitle(string $title): bool
+    public static function isTitleValid(string $title): bool
     {
-        return InputValidator::isLengthWithInLimit($title, "title", Constants::TITLE_ALLOWED_MIN_CHARS, Constants::TITLE_ALLOWED_MAX_CHARS);
+        return FormInputValidator::validateLength(
+            $title,
+            "title",
+            AppConstants::TITLE_MIN_LENGTH,
+            AppConstants::TITLE_MAX_LENGTH
+        );
     }
 
-    public static function isValidContent(string $content): bool
+    public static function isContentValid(string $content): bool
     {
-        return InputValidator::isLengthWithInLimit($content, "content", Constants::CONTENT_ALLOWED_MIN_CHARS, Constants::CONTENT_ALLOWED_MAX_CHARS);
+        return FormInputValidator::validateLength(
+            $content,
+            "content",
+            AppConstants::CONTENT_MIN_LENGTH,
+            AppConstants::CONTENT_MAX_LENGTH
+        );
     }
 
-    public static function isValidCategory(int $categoryId): bool
+    public static function isCategoryValid(int $categoryId): bool
     {
-        if (!in_array($categoryId, CategoryEntity::getIdsCategory())) {
-            $_SESSION["error_category"] = "Please select a valid category type.";
+        if (!in_array($categoryId, Category::fetchCategoryIds())) {
+            $_SESSION["error_category"] = "Please select a valid category.";
             return false;
         }
         return true;
     }
 
-    public static function isUniqueTitle(string $title, ?int $id = null): bool
+    public static function isTitleUnique(string $title, ?int $postId = null): bool
     {
-        if (!PostEntity::isTitleUnique($title, $id)) {
-            $_SESSION["error_title"] = "Title is already in use.";
+        if (!Post::isTitleUnique($title, $postId)) {
+            $_SESSION["error_title"] = "The title is already in use.";
             return false;
         }
         return true;

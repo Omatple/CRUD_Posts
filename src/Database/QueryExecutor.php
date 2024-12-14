@@ -8,128 +8,134 @@ use \PDOStatement;
 
 class QueryExecutor
 {
-    private static function getSingularTableName(string $tableName): string
+    private static function singularizeTableName(string $tableName): string
     {
         return substr($tableName, 0, strlen($tableName) - 1);
     }
 
-    protected static function executeQuery(string $query, ?string $errorMessage = null, array $placeholders = []): PDOStatement|false
+    protected static function executeStatement(string $sql, ?string $errorMessage = null, array $parameters = []): PDOStatement|false
     {
-        $connection = Connection::getInstance();
-        $pdo = $connection->getConnection()->prepare($query);
+        $databaseConnection = Connection::getInstance();
+        $preparedStatement = $databaseConnection->getConnection()->prepare($sql);
         try {
-            $pdo->execute($placeholders);
-            return $pdo;
-        } catch (PDOException $e) {
-            $message = is_null($errorMessage) ? "Failed query" : $errorMessage;
-            throw new Exception($message . ":" . $e->getMessage(), (int) $e->getCode());
+            $preparedStatement->execute($parameters);
+            return $preparedStatement;
+        } catch (PDOException $exception) {
+            $errorText = is_null($errorMessage) ? "Query execution failed" : $errorMessage;
+            throw new Exception($errorText . ": " . $exception->getMessage(), (int)$exception->getCode());
         } finally {
-            $connection->closeConnection();
+            $databaseConnection->closeConnection();
         }
     }
 
-    protected static function read(string $tableName, ?int $id = null): array|false
+    protected static function countTableEntries(string $tableName): int
     {
-        $idQuery = is_null($id) ? "" : " WHERE id = :i";
-        $idPlaceholders = is_null($id) ? [] : [":i" => $id];
-        return self::executeQuery(
-            "SELECT * FROM $tableName$idQuery",
-            "Failed to retrieve " . self::getSingularTableName($tableName),
-            $idPlaceholders
+        return self::executeStatement(
+            "SELECT COUNT(*) FROM " . $tableName,
+            "Failed to retrieve the number of entries in the table."
+        )->fetchColumn();
+    }
+
+    protected static function fetchRecords(string $tableName, ?int $recordId = null): array|false
+    {
+        $condition = is_null($recordId) ? "" : " WHERE id = :id";
+        $parameters = is_null($recordId) ? [] : [":id" => $recordId];
+        return self::executeStatement(
+            "SELECT * FROM $tableName$condition",
+            "Failed to fetch records from " . self::singularizeTableName($tableName),
+            $parameters
         )->fetchAll();
     }
 
-    protected static function getEntityByUniqueAttribute(string $tableName, string $attribute, string $value): array|false
+    protected static function fetchByUniqueAttribute(string $tableName, string $attributeName, string $attributeValue): array|false
     {
-        return self::executeQuery(
-            "SELECT * FROM $tableName WHERE $attribute = :v",
-            "Failed to check uniqueness of " . $attribute . " '" . $value . "' on " . self::getSingularTableName($tableName),
-            [":v" => $value]
+        return self::executeStatement(
+            "SELECT * FROM $tableName WHERE $attributeName = :value",
+            "Failed to check uniqueness of $attributeName = '$attributeValue' in " . self::singularizeTableName($tableName),
+            [":value" => $attributeValue]
         )->fetch();
     }
 
-    protected static function create(string $tableName, array $attributesName, array $attributesValues): void
+    protected static function insertRecord(string $tableName, array $columns, array $values): void
     {
-        $valuesString = array_map(fn($attribute) => ":" . $attribute, $attributesName);
-        $placeholders = array_combine($valuesString, $attributesValues);
-        self::executeQuery(
-            "INSERT INTO " . $tableName . " (" . implode(",", $attributesName) . ") VALUES (" . implode(",", $valuesString) . ")",
-            "Failed to create a " . self::getSingularTableName($tableName),
-            $placeholders
+        $placeholders = array_map(fn($column) => ":" . $column, $columns);
+        $parameters = array_combine($placeholders, $values);
+        self::executeStatement(
+            "INSERT INTO $tableName (" . implode(",", $columns) . ") VALUES (" . implode(",", $placeholders) . ")",
+            "Failed to insert record into " . self::singularizeTableName($tableName),
+            $parameters
         );
     }
 
-    protected static function getIds(string $tableName): array
+    protected static function fetchAllIds(string $tableName): array
     {
-        $result = self::executeQuery(
+        $statement = self::executeStatement(
             "SELECT id FROM $tableName",
-            "Failed to retrieve ids" . self::getSingularTableName($tableName),
+            "Failed to retrieve IDs from " . self::singularizeTableName($tableName),
         );
         $ids = [];
-        while ($row = $result->fetchColumn()) {
-            $ids[] = (int) $row;
+        while ($id = $statement->fetchColumn()) {
+            $ids[] = (int)$id;
         }
         return $ids;
     }
 
-    protected static function isAttributeUnique(string $tableName, string $attributeName, string $value, ?int $id = null): bool
+    protected static function isValueUnique(string $tableName, string $columnName, string $value, ?int $excludeId = null): bool
     {
-        $idQuery = is_null($id) ? "" : " AND id <> :i";
-        $idPlaceholders = is_null($id) ? [":v" => $value] : [":v" => $value, ":i" => $id];
-        return !self::executeQuery(
-            "SELECT COUNT(*) FROM $tableName WHERE $attributeName = :v$idQuery",
-            "Failed to check if the $attributeName name '$value' is already in use on " . self::getSingularTableName($tableName),
-            $idPlaceholders
+        $condition = is_null($excludeId) ? "" : " AND id <> :excludeId";
+        $parameters = is_null($excludeId) ? [":value" => $value] : [":value" => $value, ":excludeId" => $excludeId];
+        return !self::executeStatement(
+            "SELECT COUNT(*) FROM $tableName WHERE $columnName = :value$condition",
+            "Failed to validate uniqueness of $columnName = '$value' in " . self::singularizeTableName($tableName),
+            $parameters
         )->fetchColumn();
     }
 
-    protected static function delete(string $tableName, int $id): void
+    protected static function deleteRecordById(string $tableName, int $recordId): void
     {
-        self::executeQuery(
-            "DELETE FROM " . $tableName . " WHERE id = :i",
-            "Failed to delete on table " . self::getSingularTableName($tableName) . " with ID " . $id,
-            [
-                ":i" => $id,
-            ]
+        self::executeStatement(
+            "DELETE FROM $tableName WHERE id = :id",
+            "Failed to delete record from " . self::singularizeTableName($tableName) . " with ID $recordId",
+            [":id" => $recordId]
         );
     }
 
-    protected static function update(string $tableName, int $id, array $attributesName, array $attributesValues): void
+    protected static function updateRecord(string $tableName, int $recordId, array $columns, array $values): void
     {
-        $valuesString = array_map(fn($attribute) => $attribute . " = :" . $attribute, $attributesName);
-        $placeholders = array_merge([":id" => $id], array_combine(array_map(fn($attribute) => ":" . $attribute, $attributesName), $attributesValues));
-        self::executeQuery(
-            "UPDATE " . $tableName . " SET " . implode(",", $valuesString) . " WHERE id = :id",
-            "Failed to update " . self::getSingularTableName($tableName) . " with ID '$id'",
-            $placeholders
+        $setClause = array_map(fn($column) => "$column = :" . $column, $columns);
+        $parameters = array_merge(
+            [":id" => $recordId],
+            array_combine(array_map(fn($column) => ":" . $column, $columns), $values)
+        );
+        self::executeStatement(
+            "UPDATE $tableName SET " . implode(",", $setClause) . " WHERE id = :id",
+            "Failed to update record in " . self::singularizeTableName($tableName) . " with ID $recordId",
+            $parameters
         );
     }
 
-    protected static function updateOnlyAttribute(string $tableName, int $id, string $attributeName, string $attributeValue): void
+    protected static function updateSingleColumn(string $tableName, int $recordId, string $columnName, string $value): void
     {
-        self::executeQuery(
-            "UPDATE " . $tableName . " SET " . $attributeName . " = :" . $attributeName . " WHERE id = :id",
-            "Failed to update " . $attributeName . " from " . self::getSingularTableName($tableName) . " with ID '$id'",
-            [
-                ":id" => $id,
-                ":$attributeName" => $attributeValue,
-            ]
+        self::executeStatement(
+            "UPDATE $tableName SET $columnName = :value WHERE id = :id",
+            "Failed to update $columnName in " . self::singularizeTableName($tableName) . " with ID $recordId",
+            [":id" => $recordId, ":value" => $value]
         );
     }
 
-    protected static function deleteAllRegistres(string $tableName): void
+    protected static function deleteAllRecords(string $tableName): void
     {
-        self::executeQuery(
-            "DELETE FROM " . $tableName,
-            "Failed to delete all registres from table " . self::getSingularTableName($tableName)
+        self::executeStatement(
+            "DELETE FROM $tableName",
+            "Failed to delete all records from " . self::singularizeTableName($tableName)
         );
     }
 
-    protected static function resetIncremenntIds(string $tableName): void
+    protected static function resetAutoIncrement(string $tableName): void
     {
-        self::executeQuery(
-            "ALTER TABLE " . $tableName . " AUTO_INCREMENT = 1",
-            "Failed to reset auto increment id from table " . self::getSingularTableName($tableName)
+        self::executeStatement(
+            "ALTER TABLE $tableName AUTO_INCREMENT = 1",
+            "Failed to reset auto-increment for " . self::singularizeTableName($tableName)
         );
     }
 }

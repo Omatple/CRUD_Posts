@@ -2,23 +2,23 @@
 
 namespace App\Utils;
 
-enum Categories: string
+enum BookCategories: string
 {
     case Art = "Arte";
     case Science = "Ciencia";
     case Fiction = "Ficción";
     case History = "Historia";
     case Environment = "Medio Ambiente";
-    case Policy = "Politica";
+    case Policy = "Política";
 
-    public function toString(): string
+    public function getCategoryName(): string
     {
         return $this->value;
     }
 
-    public static function getColor(string $category): string
+    public static function getCategoryColor(string $categoryName): string
     {
-        return match ($category) {
+        return match ($categoryName) {
             self::Art->value => "orange",
             self::Science->value => "lime",
             self::Fiction->value => "cyan",

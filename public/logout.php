@@ -1,6 +1,6 @@
 <?php
 
-use App\Utils\Navigation;
+use App\Utils\PageNavigation;
 
 session_start();
 require __DIR__ . "/../vendor/autoload.php";
@@ -8,4 +8,5 @@ require __DIR__ . "/../vendor/autoload.php";
 if (isset($_SESSION["user"])) {
     session_destroy();
 }
-Navigation::redirectTo("index.php");
+
+PageNavigation::redirectToPage("index.php");

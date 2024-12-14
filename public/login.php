@@ -1,29 +1,47 @@
 <?php
 
-use App\Database\UserEntity;
-use App\Utils\CookieManager;
-use App\Utils\InputValidator;
-use App\Utils\Navigation;
-use App\Utils\SessionErrorDisplay;
+use App\Database\User;
+use App\Utils\CookieHelper;
+use App\Utils\FormInputValidator;
+use App\Utils\PageNavigation;
+use App\Utils\SessionErrorHandler;
 use App\Utils\UserValidator;
 
 session_start();
 require __DIR__ . "/../vendor/autoload.php";
-if (isset($_SESSION["user"])) Navigation::redirectTo("index.php");
-if (CookieManager::showLoginButton() && isset($_POST["email"])) {
-    $email = InputValidator::sanitize($_POST["email"]);
-    $pass = InputValidator::sanitize($_POST["pass"]);
+
+if (isset($_SESSION["user"])) {
+    PageNavigation::redirectToPage("index.php");
+}
+
+if (CookieHelper::canShowLoginButton() && isset($_POST["email"])) {
+    $email = FormInputValidator::sanitizeInput($_POST["email"]);
+    $password = FormInputValidator::sanitizeInput($_POST["pass"]);
     $hasErrors = false;
-    if (!UserValidator::isValidEmail($email)) $hasErrors = true;
-    if (!UserValidator::isValidLength($pass)) $hasErrors = true;
-    if ($hasErrors) Navigation::refresh();
-    if (!UserValidator::isValidCredentials($email, $pass)) {
-        CookieManager::incrementAttempts();
-        Navigation::refresh();
+
+    if (!UserValidator::isEmailValid($email)) {
+        $hasErrors = true;
     }
-    if (CookieManager::getAttemptsLogin()) CookieManager::deleteAttempts();
-    $_SESSION["user"] = UserEntity::getUserByEmail($email);
-    Navigation::redirectTo("index.php");
+
+    if (!UserValidator::isPasswordLengthValid($password)) {
+        $hasErrors = true;
+    }
+
+    if ($hasErrors) {
+        PageNavigation::reloadCurrentPage();
+    }
+
+    if (!UserValidator::areCredentialsValid($email, $password)) {
+        CookieHelper::incrementLoginAttempts();
+        PageNavigation::reloadCurrentPage();
+    }
+
+    if (CookieHelper::getLoginAttempts() > 0) {
+        CookieHelper::resetLoginAttempts();
+    }
+
+    $_SESSION["user"] = User::fetchUserByEmail($email);
+    PageNavigation::redirectToPage("index.php");
 }
 ?>
 <!DOCTYPE html>
@@ -32,7 +50,7 @@ if (CookieManager::showLoginButton() && isset($_POST["email"])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Examen</title>
+    <title>Login</title>
     <!-- CDN sweetalert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <!-- CDN tailwind css -->
@@ -44,7 +62,7 @@ if (CookieManager::showLoginButton() && isset($_POST["email"])) {
 <body class="flex items-center justify-center min-h-screen bg-orange-200">
     <div class="bg-white p-8 rounded-xl shadow-xl w-96">
         <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Login</h2>
-        <form method='POST' action="<?= $_SERVER["PHP_SELF"] ?>">
+        <form method="POST" action="<?= htmlspecialchars($_SERVER["PHP_SELF"]) ?>">
             <!-- Email Field -->
             <div class="mb-4">
                 <label for="email" class="block text-gray-600 mb-1">
@@ -59,8 +77,8 @@ if (CookieManager::showLoginButton() && isset($_POST["email"])) {
                         class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <i class="fas fa-user absolute top-3 right-3 text-gray-400"></i>
                 </div>
-                <?= SessionErrorDisplay::showError("email") ?>
-                <?= SessionErrorDisplay::showError("credentials") ?>
+                <?= SessionErrorHandler::displayError("email") ?>
+                <?= SessionErrorHandler::displayError("credentials") ?>
             </div>
             <!-- Password Field -->
             <div class="mb-4">
@@ -76,9 +94,9 @@ if (CookieManager::showLoginButton() && isset($_POST["email"])) {
                         class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <i class="fas fa-key absolute top-3 right-3 text-gray-400"></i>
                 </div>
-                <?= SessionErrorDisplay::showError("password") ?>
-                <?= SessionErrorDisplay::showError("attempts") ?>
-                <?= SessionErrorDisplay::showError("block") ?>
+                <?= SessionErrorHandler::displayError("password") ?>
+                <?= SessionErrorHandler::displayError("attempts") ?>
+                <?= SessionErrorHandler::displayError("block") ?>
             </div>
             <!-- Buttons -->
             <div class="flex items-center justify-between">
@@ -92,16 +110,15 @@ if (CookieManager::showLoginButton() && isset($_POST["email"])) {
                     class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none">
                     <i class="fas fa-redo mr-2"></i>Reset
                 </button>
-                <?php if (CookieManager::showLoginButton()):   ?>
+                <?php if (CookieHelper::canShowLoginButton()): ?>
                     <button
                         type="submit"
                         class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">
                         <i class="fas fa-sign-in-alt mr-2"></i>Login
                     </button>
-                <?php endif;  ?>
+                <?php endif; ?>
             </div>
         </form>
-
     </div>
 </body>
 
